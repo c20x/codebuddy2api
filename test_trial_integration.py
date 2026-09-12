@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import converter
 import credits
+import runtime
 import trial_rewards
 
 
@@ -20,7 +21,7 @@ class TrialIntegrationTests(unittest.TestCase):
             "cred": None, "cred_pool": None, "ledger": None, "log_path": None,
             "auto_trial": False, "trial_ledger": trial_rewards.TrialLedger(self.root / "trials.json"),
         }))
-        self.enterContext(patch.object(converter, "_log"))
+        self.enterContext(patch.object(runtime, "_log"))
         self.order = []
         self.claim = self.enterContext(patch.object(trial_rewards, "claim_trial", side_effect=self.claimed))
         self.balance = self.enterContext(patch.object(credits, "fetch_credits", side_effect=self.credited))

@@ -14,7 +14,9 @@ from unittest.mock import Mock, patch
 import httpx
 from fastapi.testclient import TestClient
 
+import chat_proxy
 import converter
+import runtime
 import upstream_io
 
 
@@ -56,8 +58,8 @@ class EndpointTests(unittest.TestCase):
             "api_key": "", "cred": None, "cred_pool": None, "model_guard": False,
             "max_images": 16, "image_policy": "truncate", "max_request_bytes": 32 * 1024 * 1024,
             "log_body_limit": 65536, "log_path": None, "desensitize": False, "no_compact": False}))
-        self.credentials = self.enterContext(patch.object(converter, "_cred_for", return_value=(None, {})))
-        self.logs = self.enterContext(patch.object(converter, "_log"))
+        self.credentials = self.enterContext(patch.object(chat_proxy, "_cred_for", return_value=(None, {})))
+        self.logs = self.enterContext(patch.object(runtime, "_log"))
         self.requests = []
         self.respond = lambda request: httpx.Response(200, content=sse())
         real_client = httpx.AsyncClient
@@ -399,7 +401,7 @@ class LogIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "test.log"
             with patch.dict(converter.CONFIG, {"log_path": str(path), "log_body_limit": 256}), \
-                    patch.object(converter, "LOG_MAX_BYTES", 2048):
+                    patch.object(runtime, "LOG_MAX_BYTES", 2048):
                 with ThreadPoolExecutor(max_workers=8) as executor:
                     list(executor.map(converter._log, [f"event={i} " + "汉字" * 1000 for i in range(30)]))
             files = list(Path(directory).glob("test.log*"))

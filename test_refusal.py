@@ -144,7 +144,9 @@ class EndpointRefusalTests(unittest.TestCase):
     def setUp(self):
         import httpx
         from fastapi.testclient import TestClient
+        import chat_proxy
         import converter
+        import runtime
         import upstream_io
 
         self.httpx = httpx
@@ -153,8 +155,8 @@ class EndpointRefusalTests(unittest.TestCase):
             "model_guard": False, "model_cache": None, "models_remote": None,
             "max_images": 16, "image_policy": "truncate", "max_request_bytes": 32 * 1024 * 1024,
             "log_body_limit": 0, "log_path": None, "desensitize": False, "no_compact": False}))
-        self.enterContext(patch.object(converter, "_cred_for", return_value=(None, {})))
-        self.enterContext(patch.object(converter, "_log"))
+        self.enterContext(patch.object(chat_proxy, "_cred_for", return_value=(None, {})))
+        self.enterContext(patch.object(runtime, "_log"))
         self.enterContext(patch.object(httpx.HTTPTransport, "handle_request",
                                       side_effect=AssertionError("real network forbidden")))
         self.enterContext(patch.object(httpx.AsyncHTTPTransport, "handle_async_request",

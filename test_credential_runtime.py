@@ -13,6 +13,8 @@ from unittest.mock import patch
 import httpx
 
 import converter
+import credential_runtime
+import runtime
 
 
 class CredentialRuntimeTests(unittest.TestCase):
@@ -21,7 +23,7 @@ class CredentialRuntimeTests(unittest.TestCase):
         self.root = Path(temporary)
         self.enterContext(patch.dict(os.environ, {"CODEBUDDY_AUTH_DIR": temporary}))
         self.enterContext(patch.dict(converter.CONFIG, {"log_path": None, "cred_pool": None, "cred": None}))
-        self.logs = self.enterContext(patch.object(converter, "_log"))
+        self.logs = self.enterContext(patch.object(runtime, "_log"))
         self.calls = 0
         real_client = httpx.Client
         transport = httpx.MockTransport(self.refresh_response)
@@ -89,7 +91,7 @@ class CredentialRuntimeTests(unittest.TestCase):
         path = self.credential()
         original = path.read_bytes()
         pool = converter.CredentialPool([path])
-        with patch.object(converter, "atomic_write_credential", side_effect=OSError("synthetic disk failure")):
+        with patch.object(credential_runtime, "atomic_write_credential", side_effect=OSError("synthetic disk failure")):
             pool.refresh_due()
             pool.refresh_due()
         self.assertEqual(self.calls, 1)

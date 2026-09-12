@@ -5,6 +5,13 @@
 !requirements.txt
 !VERSION
 !converter.py
+!runtime.py
+!auth_store.py
+!credential_runtime.py
+!model_table.py
+!housekeeping.py
+!chat_proxy.py
+!protocol_api.py
 !anthropic_adapter.py
 !auth_oauth.py
 !credential_io.py
