@@ -12,6 +12,8 @@
 !housekeeping.py
 !chat_proxy.py
 !protocol_api.py
+!webui.py
+!webui.html
 !anthropic_adapter.py
 !auth_oauth.py
 !credential_io.py

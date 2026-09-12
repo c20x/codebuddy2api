@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>codebuddy2api · 账号池</title>
+<style>
+  :root {
+    --bg: #121410; --panel: #1b1e18; --line: #2c3228; --ink: #e8eadf;
+    --muted: #9aa390; --good: #8fbf5a; --bad: #d36b4f; --warn: #d4a017;
+    --accent: #c4a35a; --accent-ink: #16140e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif; }
+  a { color: var(--accent); }
+  header {
+    display: flex; gap: 16px; align-items: center; justify-content: space-between;
+    padding: 16px 22px; border-bottom: 1px solid var(--line); background: #161814;
+    position: sticky; top: 0; z-index: 5;
+  }
+  .brand { display: flex; flex-direction: column; gap: 2px; }
+  .brand b { font-size: 16px; letter-spacing: .04em; }
+  .brand span { color: var(--muted); font-size: 12px; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  input, button, select {
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    border-radius: 6px; padding: 8px 10px; font: inherit;
+  }
+  input { min-width: 180px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button.danger { color: var(--bad); border-color: #5a3228; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  main { padding: 18px 22px 40px; max-width: 1200px; margin: 0 auto; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .stat .k { color: var(--muted); font-size: 12px; }
+  .stat .v { font-size: 22px; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 18px 0 10px; }
+  .row h2 { margin: 0; font-size: 15px; }
+  .cards { display: grid; gap: 10px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; display: grid; gap: 10px;
+  }
+  .card-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+  .name { font-weight: 650; }
+  .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .pill.ok { color: var(--good); border-color: #355228; }
+  .pill.bad { color: var(--bad); border-color: #5a3228; }
+  .pill.warn { color: var(--warn); border-color: #5a4a18; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; font-size: 12px; color: var(--muted); }
+  .grid b { display: block; color: var(--ink); font-weight: 550; margin-top: 2px; }
+  .empty, .err, .okmsg { padding: 16px; border-radius: 10px; border: 1px dashed var(--line); color: var(--muted); }
+  .err { border-style: solid; color: var(--bad); background: #241816; }
+  .okmsg { border-style: solid; color: var(--good); background: #182016; }
+  .models { display: flex; flex-wrap: wrap; gap: 6px; }
+  .models span { font-size: 12px; background: #22261e; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+  .models small { color: var(--muted); margin-left: 4px; }
+  dialog {
+    border: 1px solid var(--line); background: #171910; color: var(--ink);
+    border-radius: 12px; padding: 0; width: min(520px, 92vw);
+  }
+  dialog::backdrop { background: rgba(0,0,0,.55); }
+  .dlg { padding: 18px 20px 16px; }
+  .dlg h3 { margin: 0 0 8px; }
+  .dlg p { color: var(--muted); margin: 0 0 14px; }
+  .dlg-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .urlbox { word-break: break-all; background: #121410; border: 1px solid var(--line); padding: 10px; border-radius: 8px; font-size: 12px; }
+  footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <b>codebuddy2api</b>
+    <span>本机账号池 · 不离开 127.0.0.1</span>
+  </div>
+  <div class="toolbar">
+    <input id="apikey" type="password" placeholder="API Key（启用 --api-key 时必填）" autocomplete="off">
+    <button id="refresh" type="button">刷新</button>
+    <button id="checkin" type="button">签到并刷积分</button>
+    <button id="add-cn" class="primary" type="button">添加国内账号</button>
+    <button id="add-intl" class="primary" type="button">添加国际账号</button>
+  </div>
+</header>
+<main>
+  <div id="banner"></div>
+  <section class="stats">
+    <div class="stat"><div class="k">账号</div><div class="v" id="s-total">—</div></div>
+    <div class="stat"><div class="k">健康</div><div class="v" id="s-ok">—</div></div>
+    <div class="stat"><div class="k">剩余积分</div><div class="v" id="s-credits">—</div></div>
+    <div class="stat"><div class="k">可用模型</div><div class="v" id="s-models">—</div></div>
+  </section>
+  <div class="row"><h2>账号池</h2><span class="meta" id="updated"></span></div>
+  <div id="accounts" class="cards"></div>
+  <div class="row"><h2>模型目录</h2></div>
+  <div id="models" class="models"></div>
+  <footer>页面只调用本机 /admin 与 /v1 接口，不会展示登录令牌。删除账号会移除对应 *.info。</footer>
+</main>
+<dialog id="login-dlg">
+  <div class="dlg">
+    <h3 id="login-title">扫码添加账号</h3>
+    <p id="login-help">将打开官方登录页。扫码后请等本页提示「已保存」，不要立刻关掉。</p>
+    <div class="urlbox" id="login-url"></div>
+    <div class="dlg-actions">
+      <button type="button" id="login-open">打开登录页</button>
+      <button type="button" id="login-cancel">取消</button>
+    </div>
+  </div>
+</dialog>
+<script>
+const $ = (id) => document.getElementById(id);
+const KEY = "codebuddy2api.ui.key";
+let pollTimer = null;
+let loginUrl = "";
+
+$("apikey").value = localStorage.getItem(KEY) || "";
+$("apikey").addEventListener("change", () => localStorage.setItem(KEY, $("apikey").value.trim()));
+
+function authHeaders() {
+  const key = $("apikey").value.trim();
+  const headers = { "Accept": "application/json" };
+  if (key) {
+    headers.Authorization = "Bearer " + key;
+    headers["X-Api-Key"] = key;
+  }
+  return headers;
+}
+
+function errText(data, fallback) {
+  if (!data) return fallback;
+  if (typeof data.detail === "string") return data.detail;
+  const nested = data.detail && data.detail.error && data.detail.error.message;
+  const msg = (data.error && data.error.message) || nested || data.error || fallback;
+  return typeof msg === "string" ? msg : fallback;
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { ...authHeaders(), ...(opts.headers || {}) } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(res.status === 401 ? "API Key 不正确或未填写" : errText(data, "请求失败 " + res.status));
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+function setBanner(text, kind) {
+  const box = $("banner");
+  box.innerHTML = "";
+  if (!text) return;
+  const el = document.createElement("div");
+  el.className = kind === "ok" ? "okmsg" : "err";
+  el.textContent = text;
+  box.appendChild(el);
+}
+
+function basename(path) {
+  return String(path || "").replace(/\\/g, "/").split("/").pop();
+}
+
+function fmtTime(ms) {
+  const n = Number(ms);
+  if (!n) return "—";
+  const d = new Date(n < 1e12 ? n * 1000 : n);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString();
+}
+
+function pill(text, cls) {
+  const el = document.createElement("span");
+  el.className = "pill" + (cls ? " " + cls : "");
+  el.textContent = text;
+  return el;
+}
+
+function field(label, value) {
+  const wrap = document.createElement("div");
+  wrap.appendChild(document.createElement("span")).textContent = label;
+  const b = document.createElement("b");
+  b.textContent = value == null || value === "" ? "—" : String(value);
+  wrap.appendChild(b);
+  return wrap;
+}
+
+function creditsOf(cred, ledger) {
+  const direct = ledger[cred.auth_file];
+  if (direct) return direct;
+  const values = Object.values(ledger);
+  return values.find((item) => item && item.identity && item.identity === cred.account_key) || {};
+}
+
+function renderAccounts(creds, ledger) {
+  const root = $("accounts");
+  root.innerHTML = "";
+  if (!creds.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "还没有账号。点右上角扫码添加，或把 *.info 放到 auth/ 后刷新。";
+    root.appendChild(empty);
+    return;
+  }
+  for (const cred of creds) {
+    const info = creditsOf(cred, ledger);
+    const credit = info.credits || {};
+    const checkin = info.checkin || {};
+    const card = document.createElement("div");
+    card.className = "card";
+    const head = document.createElement("div");
+    head.className = "card-head";
+    const left = document.createElement("div");
+    const name = document.createElement("div");
+    name.className = "name";
+    name.textContent = cred.nickname || cred.uid || basename(cred.auth_file);
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = (cred.uid || "无 uid") + " · " + basename(cred.auth_file);
+    left.append(name, meta);
+    const pills = document.createElement("div");
+    pills.className = "pills";
+    pills.append(
+      pill(cred.healthy ? "健康" : "熔断", cred.healthy ? "ok" : "bad"),
+      pill(cred.profile || "unknown"),
+      pill((cred.region || "") + "/" + (cred.product || "")),
+      cred.token_expired ? pill("token 将过期", "warn") : pill("token 有效", "ok"),
+    );
+    if (cred.error) pills.append(pill(cred.error, "bad"));
+    const actions = document.createElement("div");
+    const del = document.createElement("button");
+    del.className = "danger";
+    del.textContent = "删除";
+    del.addEventListener("click", () => removeAccount(basename(cred.auth_file), cred.nickname || cred.uid));
+    actions.append(pills, del);
+    actions.style.display = "grid";
+    actions.style.gap = "8px";
+    actions.style.justifyItems = "end";
+    head.append(left, actions);
+    const grid = document.createElement("div");
+    grid.className = "grid";
+    grid.append(
+      field("积分", credit.credits == null ? "同步中" : credit.credits),
+      field("最快过期", credit.soonest_expiry ? fmtTime(credit.soonest_expiry) : "—"),
+      field("今日签到", checkin.ok ? ("成功 " + (checkin.date || "")) : (checkin.date ? "未完成" : "—")),
+      field("黏绑会话", cred.sticky_sessions || 0),
+      field("token 到期", fmtTime(cred.token_expires_at)),
+      field("上次刷新", fmtTime(cred.last_refresh_time)),
+    );
+    const cool = cred.model_cooldowns && Object.keys(cred.model_cooldowns);
+    if (cool && cool.length) {
+      grid.append(field("模型冷却", cool.map((m) => m + " → " + cred.model_cooldowns[m]).join("；")));
+    }
+    if (info.error) grid.append(field("积分同步", info.error));
+    card.append(head, grid);
+    root.appendChild(card);
+  }
+}
+
+function renderModels(items) {
+  const root = $("models");
+  root.innerHTML = "";
+  if (!items.length) {
+    root.textContent = "目录尚未就绪，添加账号后稍候刷新。";
+    return;
+  }
+  for (const item of items) {
+    const el = document.createElement("span");
+    el.append(item.id || "?");
+    if (item.credits) {
+      const s = document.createElement("small");
+      s.textContent = item.credits;
+      el.appendChild(s);
+    }
+    root.appendChild(el);
+  }
+}
+
+async function refresh() {
+  setBanner("");
+  try {
+    const [credsRes, creditsRes, modelsRes] = await Promise.all([
+      api("/admin/credentials"),
+      api("/admin/credits").catch(() => ({ credits: {} })),
+      api("/v1/models").catch(() => ({ data: [] })),
+    ]);
+    const creds = credsRes.credentials || [];
+    const ledger = creditsRes.credits || {};
+    const models = modelsRes.data || [];
+    const remaining = Object.values(ledger).reduce((sum, item) => sum + Number((item.credits || {}).credits || 0), 0);
+    $("s-total").textContent = creds.length;
+    $("s-ok").textContent = creds.filter((c) => c.healthy).length;
+    $("s-credits").textContent = remaining ? remaining.toFixed(2).replace(/\.00$/, "") : "0";
+    $("s-models").textContent = models.length;
+    $("updated").textContent = "更新于 " + new Date().toLocaleTimeString();
+    renderAccounts(creds, ledger);
+    renderModels(models);
+  } catch (error) {
+    setBanner(error.message, "err");
+  }
+}
+
+async function removeAccount(name, label) {
+  if (!name || !confirm("确定删除 " + (label || name) + " ？此操作会移除本机凭据文件。")) return;
+  try {
+    await api("/admin/credentials/" + encodeURIComponent(name), { method: "DELETE" });
+    setBanner("已删除 " + name, "ok");
+    await refresh();
+  } catch (error) {
+    setBanner(error.message, "err");
+  }
+}
+
+async function checkin() {
+  try {
+    await api("/admin/checkin", { method: "POST" });
+    setBanner("已触发签到与积分刷新", "ok");
+    await refresh();
+  } catch (error) {
+    setBanner(error.message, "err");
+  }
+}
+
+function stopPoll() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+async function startLogin(site) {
+  stopPoll();
+  setBanner("");
+  try {
+    const started = await api("/admin/oauth/start?site=" + encodeURIComponent(site), { method: "POST" });
+    loginUrl = started.verification_uri || "";
+    $("login-title").textContent = site === "intl" ? "扫码添加国际账号" : "扫码添加国内账号";
+    $("login-url").textContent = loginUrl || "未返回登录链接";
+    $("login-dlg").showModal();
+    if (loginUrl) window.open(loginUrl, "_blank", "noopener");
+    pollTimer = setInterval(async () => {
+      try {
+        const result = await api("/admin/oauth/poll?login_id=" + encodeURIComponent(started.login_id));
+        if (!result.done) return;
+        stopPoll();
+        $("login-dlg").close();
+        if (result.error) setBanner(result.error, "err");
+        else {
+          setBanner("账号已保存：" + (result.nickname || result.uid), "ok");
+          await refresh();
+        }
+      } catch (error) {
+        stopPoll();
+        $("login-dlg").close();
+        setBanner(error.message, "err");
+      }
+    }, 1500);
+  } catch (error) {
+    setBanner(error.message, "err");
+  }
+}
+
+$("refresh").addEventListener("click", refresh);
+$("checkin").addEventListener("click", checkin);
+$("add-cn").addEventListener("click", () => startLogin("cn"));
+$("add-intl").addEventListener("click", () => startLogin("intl"));
+$("login-open").addEventListener("click", () => loginUrl && window.open(loginUrl, "_blank", "noopener"));
+$("login-cancel").addEventListener("click", () => { stopPoll(); $("login-dlg").close(); });
+$("login-dlg").addEventListener("close", stopPoll);
+refresh();
+</script>
+</body>
+</html>

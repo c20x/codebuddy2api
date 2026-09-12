@@ -50,7 +50,7 @@ cp .env.example .env
 uv run --env-file .env converter.py --desensitize --log converter.log
 ```
 
-Listening on `http://127.0.0.1:8787` means it is up.
+Listening on `http://127.0.0.1:8787` means it is up. Open that URL in a browser for the local account-pool UI: scan to add CN/intl accounts, inspect health and credits, delete credentials, and trigger check-in. If `--api-key` is enabled, enter the same key in the page header.
 
 Plain `python3` does not load `.env`; set environment variables or CLI flags explicitly. With an API key enabled, include its Authorization header on API requests.
 
@@ -128,6 +128,7 @@ These original paths serve all supported regions and products. `/cn` and `/intl`
 
 | Shared endpoint | Description |
 |------|------|
+| `GET /` · `GET /admin` | Local account-pool UI |
 | `GET /health` | Public liveness only (`{"status":"ok"}`) |
 | `GET /v1/dashboard/billing/subscription` | Total credit balance as `hard_limit_usd` |
 | `GET /v1/dashboard/billing/usage` | Usage in cents, with daily cost breakdown |

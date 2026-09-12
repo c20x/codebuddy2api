@@ -50,7 +50,7 @@ cp .env.example .env
 uv run --env-file .env converter.py --desensitize --log converter.log
 ```
 
-看到监听 `http://127.0.0.1:8787` 即启动成功。
+看到监听 `http://127.0.0.1:8787` 即启动成功。浏览器打开同一地址可进入账号池管理页：扫码添加国内/国际账号、查看健康与积分、删除凭据、手动签到。启用了 `--api-key` 时在页面右上角填入同一密钥。
 
 直接运行 `python3` 不会自动读取 `.env`，需显式设置环境变量或命令行参数。启用 API key 后，API 请求须携带对应的 Authorization 头。
 
@@ -128,6 +128,7 @@ Cherry Studio / ZCode / LobeChat / NextChat / Open WebUI 或自写 SDK 客户端
 
 | 共用接口 | 说明 |
 |------|------|
+| `GET /` · `GET /admin` | 本机账号池管理页 |
 | `GET /health` | 公开存活检查，仅返回 `{"status":"ok"}` |
 | `GET /v1/dashboard/billing/subscription` | 总积分折算余额（`hard_limit_usd`） |
 | `GET /v1/dashboard/billing/usage` | 用量（美分）与按日明细 |

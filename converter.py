@@ -10,6 +10,7 @@ codebuddy2api — 把 CodeBuddy / WorkBuddy 的订阅暴露成标准 OpenAI 兼�
   housekeeping.py       积分 / 签到 / 目录后台同步
   chat_proxy.py         上游转发与 SSE
   protocol_api.py       Chat / Responses / Anthropic 路由
+  webui.py / webui.html 本机账号池管理页
   converter.py          入口、管理接口、login / serve
 """
 
@@ -63,6 +64,7 @@ from protocol_api import (
     chat_completions, count_tokens, create_message, create_response, list_models,
     register as register_protocol_routes,
 )
+from webui import register as register_webui
 from client_profiles import CLI_USER_AGENT, CLI_VERSION, account_key, catalog_cache_key, credential_headers
 from site_routing import (
     DOMESTIC, INTERNATIONAL, PROFILE_ENDPOINTS, chat_url_for_headers, profile_for_auth,
@@ -77,6 +79,7 @@ except ImportError:
 
 app = FastAPI(title="codebuddy2api", version=APP_VERSION)
 register_protocol_routes(app)
+register_webui(app)
 
 _OAUTH = auth_oauth.OAuthManager(user_agent=USER_AGENT)
 
@@ -559,6 +562,7 @@ def main():
         preflight()
 
     sys.stderr.write(f"\n✅ 监听 http://{args.host}:{args.port}（直连后端，原生 function calling）\n")
+    sys.stderr.write(f"   管理界面: http://{args.host}:{args.port}/\n")
     sys.stderr.write("   GET  /v1/models\n")
     sys.stderr.write("   POST /v1/chat/completions   (原生 tools/tool_calls，支持流式)\n")
     sys.stderr.write("   POST /v1/responses          (Responses API，Codex CLI 兼容)\n")
