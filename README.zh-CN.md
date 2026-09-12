@@ -135,6 +135,7 @@ Cherry Studio / ZCode / LobeChat / NextChat / Open WebUI 或自写 SDK 客户端
 | `GET/POST/DELETE /admin/credentials` | 查看 / 导入 / 移除凭证 |
 | `POST /admin/oauth/start` · `GET /admin/oauth/poll` | 无感登录（见上文） |
 | `GET /admin/credits` · `POST /admin/checkin` | 积分余额 / 手动签到 |
+| `GET /admin/usage` | 本机最近请求流水与官方按日用量 |
 
 启用 `--api-key` 后，admin 接口均需携带该 key。详细凭证池状态请查 `/admin/credentials`；`/health` 不返回账号、路径或异常信息。
 

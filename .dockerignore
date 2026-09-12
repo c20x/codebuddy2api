@@ -12,6 +12,7 @@
 !housekeeping.py
 !chat_proxy.py
 !protocol_api.py
+!usage_history.py
 !webui.py
 !webui.html
 !anthropic_adapter.py

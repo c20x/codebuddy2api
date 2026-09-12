@@ -10,6 +10,7 @@ codebuddy2api — 把 CodeBuddy / WorkBuddy 的订阅暴露成标准 OpenAI 兼�
   housekeeping.py       积分 / 签到 / 目录后台同步
   chat_proxy.py         上游转发与 SSE
   protocol_api.py       Chat / Responses / Anthropic 路由
+  usage_history.py      本机请求流水
   webui.py / webui.html 本机账号池管理页
   converter.py          入口、管理接口、login / serve
 """
@@ -55,6 +56,7 @@ from model_table import (
     invalidate_model_table,
 )
 from housekeeping import _housekeep_once, _housekeeper_loop, _sync_credits
+from usage_history import UsageHistory
 from chat_proxy import (
     _check_auth, _chat_result_to_sse_lines, _collect_stream, _cred_for,
     _guard_request_size, _merge_chat_sse_text, _note_cred_status, _prepare_chat_body,
@@ -267,8 +269,44 @@ def admin_checkin(authorization: Optional[str] = Header(default=None),
     pool, ledger = CONFIG.get("cred_pool"), CONFIG.get("ledger")
     if pool is None or ledger is None:
         raise HTTPException(status_code=503, detail={"error": {"message": "签到调度未启用", "type": "invalid_request_error"}})
-    _housekeep_once(pool, ledger)
-    return {"credits": ledger.snapshot()}
+    _housekeep_once(pool, ledger, sync_usage=True)
+    snap = ledger.snapshot()
+    results = []
+    for entry in pool.snapshot():
+        info = snap.get(entry["auth_file"]) or {}
+        checkin = info.get("checkin") or {}
+        results.append({
+            "nickname": entry.get("nickname") or entry.get("uid"),
+            "profile": entry.get("profile"),
+            "ok": bool(checkin.get("ok")),
+            "code": checkin.get("code"),
+            "message": checkin.get("message") or "",
+            "date": checkin.get("date"),
+        })
+    return {"credits": snap, "results": results}
+
+
+@app.get("/admin/usage")
+def admin_usage(authorization: Optional[str] = Header(default=None),
+                x_api_key: Optional[str] = Header(default=None, alias="X-Api-Key")):
+    """本机最近请求流水 + 官方按日用量缓存。"""
+    _check_auth(authorization, x_api_key)
+    history = CONFIG.get("usage_history")
+    cache = CONFIG.get("usage_daily") or {}
+    days = []
+    for day in sorted(cache.get("by_day") or {}, reverse=True):
+        models = cache["by_day"][day] or {}
+        credits = round(sum(float(value or 0) for value in models.values()), 4)
+        days.append({"date": day, "credits": credits, "models": models})
+    return {
+        "requests": history.snapshot() if history else [],
+        "official": {
+            "fetched_at": cache.get("fetched_at"),
+            "requests": cache.get("requests") or 0,
+            "total_credits": cache.get("total_credits") or 0,
+            "days": days,
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -544,6 +582,7 @@ def main():
         seed_credentials()  # 自管模式：启动时把桌面端缺失凭据复制进 auth/
     CONFIG["cred_pool"] = CredentialPool(files, scan=not files)
     CONFIG["cred"] = CONFIG["cred_pool"].first()
+    CONFIG["usage_history"] = UsageHistory(managed_auth_dir() / "usage-history.json")
     CONFIG["account_catalogs"] = {}  # 在任何维护线程/预检启动前关闭静态兜底。
     if credits_mod is not None:
         ledger = credits_mod.CreditLedger(managed_auth_dir() / "credits-ledger.json")

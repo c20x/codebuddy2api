@@ -153,10 +153,12 @@ def _sync_usage(pool):
         runtime._log(f"[usage] 明细已同步: {count} 请求 / {used:.2f} credits")
 
 
-def _housekeep_once(pool: CredentialPool, ledger, *, pending_only=False):
+def _housekeep_once(pool: CredentialPool, ledger, *, pending_only=False, sync_usage=None):
     """串行维护并提交同代次结果；新凭据只触发额度和目录查询。"""
     if credits_mod is None:
         return
+    if sync_usage is None:
+        sync_usage = not pending_only
     with _HOUSEKEEP_LOCK:
         pool._rescan()
         ids = pool.begin_sync(all_entries=not pending_only)
@@ -170,7 +172,7 @@ def _housekeep_once(pool: CredentialPool, ledger, *, pending_only=False):
                 if result is not None:
                     refs[entry["id"]] = result
             _sync_model_catalogs(pool, ledger, refs, failed)
-            if not pending_only:
+            if sync_usage:
                 _sync_usage(pool)
         except Exception:
             failed.update(ids)

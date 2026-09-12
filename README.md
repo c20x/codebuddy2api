@@ -135,6 +135,7 @@ These original paths serve all supported regions and products. `/cn` and `/intl`
 | `GET/POST/DELETE /admin/credentials` | View / import / remove credentials |
 | `POST /admin/oauth/start` · `GET /admin/oauth/poll` | Seamless login (see above) |
 | `GET /admin/credits` · `POST /admin/checkin` | Credit balances / manual daily check-in |
+| `GET /admin/usage` | Local request history and official daily usage |
 
 Admin endpoints require `--api-key` when it is set. Use `/admin/credentials` for detailed pool status; `/health` never returns account, path or exception details.
 

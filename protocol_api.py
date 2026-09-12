@@ -17,7 +17,7 @@ from chat_proxy import (
     _check_auth, _fetch_checked_chat, _last_user_text, _log_finish,
     _nonstream_adapted, _prepare_chat_body, _prepare_payload, _route_chat,
     _safe_err_raw, _stream_anthropic, _stream_responses, _stream_upstream,
-    _upstream_failure,
+    _upstream_failure, _usage_begin,
 )
 from model_table import current_model_details
 import runtime
@@ -68,6 +68,7 @@ async def chat_completions(request: Request,
                   if isinstance(t, dict)]
     last_user = _last_user_text(messages)
     rid = os.urandom(4).hex()
+    _usage_begin(rid, model_name, protocol="chat")
     runtime._log(f"[{rid}] ▶ REQUEST {model_name} | stream={client_wants_stream} | msgs={len(messages)}"
          + (f" | tools={tool_names}" if tool_names else "")
          + (f" | last_user={_truncate(last_user, 60)!r}" if last_user else ""))
@@ -121,6 +122,7 @@ async def create_response(request: Request,
     client_wants_stream = payload.get("stream", True)  # Codex CLI 默认 stream
     model_name = payload.get("model", "auto")
     rid = os.urandom(4).hex()
+    _usage_begin(rid, model_name, protocol="responses")
     runtime._log(f"[{rid}] ▶ RESPONSES {model_name} | stream={client_wants_stream} | input_items={len(payload.get('input', []))}")
     runtime._log(
         f"[{rid}] ── RESPONSES PROJECTION ── "
@@ -178,6 +180,7 @@ async def create_message(request: Request,
     model_name = payload.get("model", "auto")
     chat_messages = chat_body.get("messages", [])
     rid = os.urandom(4).hex()
+    _usage_begin(rid, model_name, protocol="anthropic")
     runtime._log(f"[{rid}] ▶ ANTHROPIC {model_name} | msgs={len(chat_messages)} | anthropic_msgs={len(messages)}")
     chat_body, cred, headers, url = _route_chat(payload, chat_body, rid)
     runtime._log_json(f"[{rid}] ANTHROPIC → CHAT BODY (预览)", chat_body)

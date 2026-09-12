@@ -14,7 +14,9 @@ from fastapi.responses import JSONResponse
 from anthropic_adapter import AnthropicStreamConverter
 from credential_runtime import _dynamic_request_headers, session_key
 from desensitize import desensitize_body
-from model_table import _catalog_pending, _in_region, _upstream_model, guard_model
+from model_table import (
+    _catalog_pending, _in_region, _upstream_model, current_model_details, guard_model,
+)
 from request_limits import ImageLimitError, apply_image_policy
 from responses_adapter import ResponsesStreamConverter
 import runtime
@@ -78,7 +80,55 @@ def _route_chat(payload, body, rid):
         _guard_request_size(body)
     url = chat_url_for_headers(headers)
     runtime._log(f"[{rid}] ROUTE | region={profile_region(profile)} | profile={profile} | model={routed_model} | url={url}")
+    _usage_begin(rid, routed_model, headers, cred)
     return body, cred, headers, url
+
+
+def _usage_begin(rid, model, headers=None, cred=None, **extra):
+    history = CONFIG.get("usage_history")
+    if history is None:
+        return
+    uid = (headers or {}).get("X-User-Id") or None
+    nickname = profile = None
+    if headers:
+        try:
+            profile = profile_for_headers(headers)
+        except Exception:
+            profile = None
+    try:
+        manager = cred[0] if isinstance(cred, tuple) else cred
+        summary = manager.summary() if manager is not None else {}
+        nickname = summary.get("nickname")
+        uid = uid or summary.get("uid")
+        profile = profile or summary.get("profile")
+    except Exception:
+        pass
+    extra = dict(extra)
+    extra.setdefault("multiplier", _model_multiplier(model, profile))
+    history.begin(rid, model=model, uid=uid, nickname=nickname, profile=profile, **extra)
+
+
+def _model_multiplier(model, profile):
+    if not model:
+        return None
+    try:
+        for item in current_model_details():
+            if item.get("id") != model:
+                continue
+            by_profile = item.get("credits_by_profile") or {}
+            if profile in by_profile and by_profile[profile] is not None:
+                return by_profile[profile]
+            return item.get("credits")
+    except Exception:
+        return None
+    return None
+
+
+def _usage_finish(rid, model_name, t0, result=None, *, ok=True, status=None, error=""):
+    history = CONFIG.get("usage_history")
+    if history is None:
+        return
+    history.finish(rid, ok=ok, t0=t0, model=model_name, result=result, status=status, error=error)
 
 
 def _note_cred_status(cred, status: int, model: str | None = None, raw: bytes = b""):
@@ -196,6 +246,7 @@ def _log_finish(model_name: str, t0: float, result: dict, rid: str = ""):
          + (f" | tool_calls={tc_names}" if tc_names else "")
          + f" | tokens={usage.get('total_tokens', '?')}")
     runtime._log_json(f"{prefix}RESPONSE BODY (预览)", result)
+    _usage_finish(rid, model_name, t0, result, ok=True, status=200)
 
 
 def _chat_completion(merged: dict) -> dict:
@@ -330,6 +381,8 @@ def _upstream_failure(error, model_name, t0, rid):
     elapsed = time.time() - t0 if t0 else 0
     runtime._log(f"[{rid}] ✗ {category} | {model_name} | {elapsed:.1f}s | {sanitize_log_text(raw.decode('utf-8', 'replace'), 512)}")
     runtime._log_text_body(f"[{rid}] ERROR BODY", raw.decode("utf-8", "replace"))
+    _usage_finish(rid, model_name, t0, ok=False, status=status,
+                  error=sanitize_log_text(raw.decode("utf-8", "replace"), 200))
     return status, raw
 
 
@@ -384,6 +437,8 @@ async def _chat_sse_lines(url, headers, body, model_name, t0, rid, cred=None, *,
     runtime._log(f"[{rid}] ◀ RESPONSE {model_name} | {time.time() - t0:.1f}s | stream finish={merged['finish_reason']}"
          + f" | tokens={(merged['usage'] or {}).get('total_tokens', '?')}")
     runtime._log_text_body(f"[{rid}] RESPONSE SSE PREVIEW", preview.decode("utf-8", "replace"))
+    _usage_finish(rid, model_name, t0, {"choices": [{"finish_reason": merged.get("finish_reason")}],
+                                        "usage": merged.get("usage") or {}}, ok=True, status=200)
 
 
 async def _stream_upstream(url: str, headers: dict, body: dict,

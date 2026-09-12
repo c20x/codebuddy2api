@@ -56,9 +56,14 @@
   .empty, .err, .okmsg { padding: 16px; border-radius: 10px; border: 1px dashed var(--line); color: var(--muted); }
   .err { border-style: solid; color: var(--bad); background: #241816; }
   .okmsg { border-style: solid; color: var(--good); background: #182016; }
+  .warnmsg { border-style: solid; color: var(--warn); background: #241c10; }
   .models { display: flex; flex-wrap: wrap; gap: 6px; }
   .models span { font-size: 12px; background: #22261e; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
   .models small { color: var(--muted); margin-left: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 550; }
+  .mono { font-variant-numeric: tabular-nums; }
   dialog {
     border: 1px solid var(--line); background: #171910; color: var(--ink);
     border-radius: 12px; padding: 0; width: min(520px, 92vw);
@@ -98,6 +103,10 @@
   <div id="accounts" class="cards"></div>
   <div class="row"><h2>模型目录</h2></div>
   <div id="models" class="models"></div>
+  <div class="row"><h2>最近请求</h2><span class="meta">积分按模型倍率估算（tokens ÷ 1000 × 倍率），官方逐条扣费以按日用量为准</span></div>
+  <div id="requests"></div>
+  <div class="row"><h2>官方按日用量</h2><span class="meta">点「签到并刷积分」会刷新最近 30 天</span></div>
+  <div id="official"></div>
   <footer>页面只调用本机 /admin 与 /v1 接口，不会展示登录令牌。删除账号会移除对应 *.info。</footer>
 </main>
 <dialog id="login-dlg">
@@ -154,9 +163,15 @@ function setBanner(text, kind) {
   box.innerHTML = "";
   if (!text) return;
   const el = document.createElement("div");
-  el.className = kind === "ok" ? "okmsg" : "err";
+  el.className = kind === "ok" ? "okmsg" : (kind === "warn" ? "warnmsg" : "err");
   el.textContent = text;
   box.appendChild(el);
+}
+
+function checkinLabel(checkin) {
+  if (!checkin || !checkin.date) return "尚未签到";
+  if (checkin.ok) return (Number(checkin.code) === 10001 ? "今日已签" : "成功") + " · " + checkin.date;
+  return checkin.message || "未成功";
 }
 
 function basename(path) {
@@ -244,7 +259,7 @@ function renderAccounts(creds, ledger) {
     grid.append(
       field("积分", credit.credits == null ? "同步中" : credit.credits),
       field("最快过期", credit.soonest_expiry ? fmtTime(credit.soonest_expiry) : "—"),
-      field("今日签到", checkin.ok ? ("成功 " + (checkin.date || "")) : (checkin.date ? "未完成" : "—")),
+      field("今日签到", checkinLabel(checkin)),
       field("黏绑会话", cred.sticky_sessions || 0),
       field("token 到期", fmtTime(cred.token_expires_at)),
       field("上次刷新", fmtTime(cred.last_refresh_time)),
@@ -257,6 +272,98 @@ function renderAccounts(creds, ledger) {
     card.append(head, grid);
     root.appendChild(card);
   }
+}
+
+function protoName(value) {
+  return ({chat: "Chat", responses: "Responses", anthropic: "Anthropic"}[value] || value || "—");
+}
+
+function creditLabel(item) {
+  if (item.credits == null || item.credits === "") return "—";
+  const value = Number(item.credits);
+  const text = Number.isFinite(value) ? String(value) : String(item.credits);
+  return item.credits_estimated ? ("约 " + text) : text;
+}
+
+function renderRequests(items) {
+  const root = $("requests");
+  root.innerHTML = "";
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "还没有经过本机网关的请求。用 Codex / Claude Code / curl 打一条就会出现。";
+    root.appendChild(empty);
+    return;
+  }
+  const table = document.createElement("table");
+  const head = document.createElement("tr");
+  ["时间", "状态", "协议", "模型", "账号", "耗时", "tokens", "积分"].forEach((label) => {
+    const th = document.createElement("th");
+    th.textContent = label;
+    head.appendChild(th);
+  });
+  table.appendChild(head);
+  for (const item of items) {
+    const tr = document.createElement("tr");
+    const cells = [
+      fmtTime((item.at || 0) * 1000),
+      item.ok ? "成功" : ((item.status || "失败") + (item.error ? " · " + item.error : "")),
+      protoName(item.protocol),
+      item.model || "—",
+      item.nickname || item.uid || item.profile || "—",
+      item.elapsed_s != null ? (item.elapsed_s + "s") : "—",
+      item.tokens != null ? String(item.tokens) : "—",
+      creditLabel(item),
+    ];
+    cells.forEach((value, index) => {
+      const td = document.createElement("td");
+      td.textContent = value;
+      if (index === 1) td.style.color = item.ok ? "var(--good)" : "var(--bad)";
+      if (index === 0 || index >= 5) td.className = "mono";
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+  }
+  root.appendChild(table);
+}
+
+function renderOfficial(official) {
+  const root = $("official");
+  root.innerHTML = "";
+  const days = (official && official.days) || [];
+  if (!days.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "还没有官方用量。点一次「签到并刷积分」会拉取最近 30 天。";
+    root.appendChild(empty);
+    return;
+  }
+  const summary = document.createElement("div");
+  summary.className = "meta";
+  summary.style.marginBottom = "8px";
+  summary.textContent = "共 " + (official.requests || 0) + " 次 · " + (official.total_credits || 0) + " credits"
+    + (official.fetched_at ? " · 同步于 " + fmtTime(official.fetched_at * 1000) : "");
+  root.appendChild(summary);
+  const table = document.createElement("table");
+  const head = document.createElement("tr");
+  ["日期", "credits", "模型"].forEach((label) => {
+    const th = document.createElement("th");
+    th.textContent = label;
+    head.appendChild(th);
+  });
+  table.appendChild(head);
+  for (const day of days) {
+    const tr = document.createElement("tr");
+    const models = Object.entries(day.models || {}).map(([name, value]) => name + " " + value).join("；") || "—";
+    [day.date, day.credits, models].forEach((value, index) => {
+      const td = document.createElement("td");
+      td.textContent = value;
+      if (index < 2) td.className = "mono";
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+  }
+  root.appendChild(table);
 }
 
 function renderModels(items) {
@@ -278,13 +385,14 @@ function renderModels(items) {
   }
 }
 
-async function refresh() {
-  setBanner("");
+async function refresh(opts = {}) {
+  if (!opts.keepBanner) setBanner("");
   try {
-    const [credsRes, creditsRes, modelsRes] = await Promise.all([
+    const [credsRes, creditsRes, modelsRes, usageRes] = await Promise.all([
       api("/admin/credentials"),
       api("/admin/credits").catch(() => ({ credits: {} })),
       api("/v1/models").catch(() => ({ data: [] })),
+      api("/admin/usage").catch(() => ({ requests: [], official: { days: [] } })),
     ]);
     const creds = credsRes.credentials || [];
     const ledger = creditsRes.credits || {};
@@ -297,6 +405,8 @@ async function refresh() {
     $("updated").textContent = "更新于 " + new Date().toLocaleTimeString();
     renderAccounts(creds, ledger);
     renderModels(models);
+    renderRequests(usageRes.requests || []);
+    renderOfficial(usageRes.official || {});
   } catch (error) {
     setBanner(error.message, "err");
   }
@@ -306,20 +416,38 @@ async function removeAccount(name, label) {
   if (!name || !confirm("确定删除 " + (label || name) + " ？此操作会移除本机凭据文件。")) return;
   try {
     await api("/admin/credentials/" + encodeURIComponent(name), { method: "DELETE" });
+    await refresh({ keepBanner: true });
     setBanner("已删除 " + name, "ok");
-    await refresh();
   } catch (error) {
     setBanner(error.message, "err");
   }
 }
 
 async function checkin() {
+  const btn = $("checkin");
+  btn.disabled = true;
+  btn.textContent = "签到中…";
   try {
-    await api("/admin/checkin", { method: "POST" });
-    setBanner("已触发签到与积分刷新", "ok");
-    await refresh();
+    const data = await api("/admin/checkin", { method: "POST" });
+    await refresh({ keepBanner: true });
+    const rows = data.results || [];
+    if (!rows.length) {
+      setBanner("没有可签到的账号", "warn");
+      return;
+    }
+    const lines = rows.map((row) => {
+      const name = row.nickname || row.profile || "账号";
+      if (row.ok) return name + "：签到成功";
+      return name + "：" + (row.message || "未成功");
+    });
+    const anyOk = rows.some((row) => row.ok);
+    const anyFail = rows.some((row) => !row.ok);
+    setBanner(lines.join("；"), anyFail && !anyOk ? "err" : (anyFail ? "warn" : "ok"));
   } catch (error) {
     setBanner(error.message, "err");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "签到并刷积分";
   }
 }
 
