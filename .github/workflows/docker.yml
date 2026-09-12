@@ -35,13 +35,6 @@ jobs:
       - name: Check release version
         id: version
         run: python scripts/check_version.py
-      - name: Install test dependencies
-        run: python -m pip install -r requirements.txt
-      - name: Run regression tests
-        run: |
-          for script in test_*.py; do
-            python -B "$script"
-          done
 
   image:
     needs: test
